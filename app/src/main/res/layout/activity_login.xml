@@ -1,137 +1,26 @@
 <?xml version="1.0" encoding="utf-8"?>
-<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
+<FrameLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/asaas_bg_dark">
+    android:background="#000000">
 
-    <!-- LOGIN FORM -->
-    <ScrollView
-        android:id="@+id/loginForm"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="visible">
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="vertical"
-            android:gravity="center_horizontal"
-            android:paddingHorizontal="32dp"
-            android:paddingTop="64dp"
-            android:paddingBottom="32dp">
-
-            <!-- Logo -->
-            <ImageView
-                android:layout_width="120dp"
-                android:layout_height="120dp"
-                android:src="@mipmap/ic_launcher"
-                android:layout_marginBottom="16dp"/>
-
-            <!-- App Title -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="ASAAS POS"
-                android:textSize="28sp"
-                android:textStyle="bold"
-                android:textColor="@color/asaas_primary"
-                android:layout_marginBottom="4dp"/>
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="نظام نقاط البيع"
-                android:textSize="16sp"
-                android:textColor="@color/asaas_text_secondary"
-                android:layout_marginBottom="40dp"/>
-
-            <!-- Tenant ID -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="رقم المنشأة (Tenant ID)"
-                app:boxBackgroundColor="@color/asaas_card_bg"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="16dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etTenant"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="number"
-                    android:imeOptions="actionNext"
-                    android:textColor="@color/asaas_text_primary"
-                    android:textColorHint="@color/asaas_text_secondary"/>
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Username -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="اسم المستخدم"
-                app:boxBackgroundColor="@color/asaas_card_bg"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="16dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etUsername"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textEmailAddress"
-                    android:imeOptions="actionNext"
-                    android:textColor="@color/asaas_text_primary"
-                    android:textColorHint="@color/asaas_text_secondary"/>
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Password -->
-            <com.google.android.material.textfield.TextInputLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:hint="كلمة المرور"
-                app:passwordToggleEnabled="true"
-                app:boxBackgroundColor="@color/asaas_card_bg"
-                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                android:layout_marginBottom="32dp">
-
-                <com.google.android.material.textfield.TextInputEditText
-                    android:id="@+id/etPassword"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:inputType="textPassword"
-                    android:imeOptions="actionDone"
-                    android:textColor="@color/asaas_text_primary"
-                    android:textColorHint="@color/asaas_text_secondary"/>
-            </com.google.android.material.textfield.TextInputLayout>
-
-            <!-- Login Button -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnLogin"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="تسجيل الدخول"
-                android:textSize="18sp"
-                android:textStyle="bold"
-                app:backgroundTint="@color/asaas_primary"
-                android:textColor="@android:color/black"
-                app:cornerRadius="12dp"/>
-
-        </LinearLayout>
-    </ScrollView>
-
-    <!-- WEBVIEW for actual login -->
+    <!-- WebView يعرض صفحة login.php كاملة -->
     <WebView
         android:id="@+id/webViewLogin"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:visibility="gone"/>
+        android:layout_height="match_parent"/>
 
-    <!-- PROGRESS BAR -->
+    <!-- شريط تحميل علوي -->
     <ProgressBar
         android:id="@+id/progressBar"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
+        style="?android:attr/progressBarStyleHorizontal"
+        android:layout_width="match_parent"
+        android:layout_height="4dp"
+        android:layout_gravity="top"
+        android:indeterminate="true"
+        android:progressTint="#F0A500"
+        android:indeterminateTint="#F0A500"
         android:visibility="gone"/>
 
 </FrameLayout>

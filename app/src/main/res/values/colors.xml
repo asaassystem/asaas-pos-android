@@ -11,6 +11,10 @@
     <color name="asaas_bg_dark">#0D1B2A</color>
     <color name="asaas_card_bg">#1A2B3C</color>
     <color name="asaas_text_primary">#FFFFFF</color>
+    <color name="asaas_text_secondary">#AAAAAA</color>
+    <color name="asaas_error">#F44336</color>
+    <color name="asaas_success">#4CAF50</color>
+    <color name="asaas_warning">#FF9800</color>
     <!-- General Colors -->
     <color name="colorWhite">#FFFFFF</color>
     <color name="colorBlack">#000000</color>

@@ -1,40 +1,33 @@
 package com.asaas.pos
 
+import android.annotation.SuppressLint
 import android.content.Intent
+import android.net.http.SslError
 import android.os.Bundle
 import android.view.View
+import android.webkit.*
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import com.asaas.pos.databinding.ActivityLoginBinding
-import com.asaas.pos.utils.NetworkUtils
 import com.asaas.pos.utils.SessionManager
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
-import okhttp3.FormBody
-import okhttp3.OkHttpClient
-import okhttp3.Request
-import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 /**
- * Login Activity for ASAAS POS
- * Supports tenant login with saved credentials (Remember Me)
+ * LoginActivity - WebView-based login for ASAAS POS
+ * Loads the web login page, intercepts session cookies,
+ * and persists credentials for auto-login.
  */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
     private lateinit var sessionManager: SessionManager
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(30, TimeUnit.SECONDS)
-        .build()
 
     companion object {
-        private const val LOGIN_URL = "https://super.asaas-system.com/api/login.php"
+        const val BASE_URL = "https://super.asaas-system.com"
+        const val LOGIN_URL = "$BASE_URL/login.php"
+        const val POS_URL = "$BASE_URL/pos_sales.php"
     }
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         binding = ActivityLoginBinding.inflate(layoutInflater)
@@ -42,139 +35,142 @@ class LoginActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(this)
 
-        // Load saved credentials if Remember Me was set
-        if (sessionManager.isRememberMe()) {
-            binding.etUsername.setText(sessionManager.getSavedUsername())
-            binding.etPassword.setText(sessionManager.getSavedPassword())
-            val savedTenant = sessionManager.getTenantId()
-            if (!savedTenant.isNullOrEmpty()) {
+        // If saved credentials exist, try to auto-login via form fill
+        val savedUser = sessionManager.getSavedUsername()
+        val savedPass = sessionManager.getSavedPassword()
+        val savedTenant = sessionManager.getTenantId() ?: ""
+
+        if (!savedUser.isNullOrEmpty() && !savedPass.isNullOrEmpty()) {
+            binding.etUsername.setText(savedUser)
+            binding.etPassword.setText(savedPass)
+            if (savedTenant.isNotEmpty()) {
                 binding.etTenant.setText(savedTenant)
             }
         }
 
+        setupWebLoginButton()
+    }
+
+    private fun setupWebLoginButton() {
         binding.btnLogin.setOnClickListener {
-            performLogin()
-        }
+            val username = binding.etUsername.text.toString().trim()
+            val password = binding.etPassword.text.toString().trim()
+            val tenant = binding.etTenant.text.toString().trim()
 
-        // Settings button - navigate to settings activity
-        try {
-            binding.btnSettings.setOnClickListener {
-                startActivity(Intent(this, SettingsActivity::class.java))
+            if (username.isEmpty()) {
+                binding.etUsername.error = "يرجى إدخال اسم المستخدم"
+                return@setOnClickListener
             }
-        } catch (e: Exception) {
-            // btnSettings may not exist in all layout versions
+            if (password.isEmpty()) {
+                binding.etPassword.error = "يرجى إدخال كلمة المرور"
+                return@setOnClickListener
+            }
+
+            // Save credentials for future auto-fill
+            sessionManager.saveCredentials(username, password)
+            if (tenant.isNotEmpty()) {
+                sessionManager.saveTenantId(tenant)
+            }
+
+            // Show webview for actual login
+            openWebLogin(username, password, tenant)
         }
     }
 
-    private fun performLogin() {
-        val tenant = try { binding.etTenant.text.toString().trim() } catch (e: Exception) { "" }
-        val username = binding.etUsername.text.toString().trim()
-        val password = binding.etPassword.text.toString().trim()
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun openWebLogin(username: String, password: String, tenant: String) {
+        binding.progressBar.visibility = View.VISIBLE
+        binding.loginForm.visibility = View.GONE
+        binding.webViewLogin.visibility = View.VISIBLE
 
-        if (username.isEmpty()) {
-            binding.etUsername.error = "يرجى إدخال اسم المستخدم"
-            return
-        }
-        if (password.isEmpty()) {
-            binding.etPassword.error = "يرجى إدخال كلمة المرور"
-            return
-        }
-
-        if (!NetworkUtils.isNetworkAvailable(this)) {
-            Toast.makeText(this, "لا يوجد اتصال بالإنترنت", Toast.LENGTH_SHORT).show()
-            return
+        val webView = binding.webViewLogin
+        webView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            databaseEnabled = true
+            setSupportZoom(false)
+            useWideViewPort = true
+            loadWithOverviewMode = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
         }
 
-        showLoading(true)
+        // Accept all SSL certs for internal server
+        webView.webViewClient = object : WebViewClient() {
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                handler?.proceed()
+            }
 
-        CoroutineScope(Dispatchers.IO).launch {
-            try {
-                val formBody = FormBody.Builder()
-                    .add("username", username)
-                    .add("password", password)
-                    .add("tenant_id", tenant)
-                    .add("app_login", "true")
-                    .add("device", "android")
-                    .build()
+            override fun onPageFinished(view: WebView?, url: String?) {
+                super.onPageFinished(view, url)
+                binding.progressBar.visibility = View.GONE
 
-                val request = Request.Builder()
-                    .url(LOGIN_URL)
-                    .post(formBody)
-                    .addHeader("Accept", "application/json")
-                    .build()
+                val currentUrl = url ?: ""
 
-                val response = client.newCall(request).execute()
-                val body = response.body?.string() ?: ""
+                // Auto-fill login form on login page
+                if (currentUrl.contains("login.php") || currentUrl == BASE_URL || currentUrl == "$BASE_URL/") {
+                    val tenantJs = if (tenant.isNotEmpty())
+                        "var tf = document.querySelector('[name=tenant_id],[id=tenant_id],[name=tenant],[id=tenant]'); if(tf) tf.value='$tenant';"
+                    else ""
 
-                withContext(Dispatchers.Main) {
-                    showLoading(false)
-                    handleLoginResponse(body, username, password, tenant)
+                    val js = """
+                        (function() {
+                            $tenantJs
+                            var u = document.querySelector('[name=username],[id=username],[type=text]:not([name=tenant_id])');
+                            var p = document.querySelector('[name=password],[id=password],[type=password]');
+                            if(u) u.value = '$username';
+                            if(p) p.value = '$password';
+                            // Auto submit
+                            var btn = document.querySelector('[type=submit],button[name=login],#btnLogin,.btn-login');
+                            if(btn) btn.click();
+                        })();
+                    """.trimIndent()
+                    view?.evaluateJavascript(js, null)
                 }
-            } catch (e: Exception) {
-                withContext(Dispatchers.Main) {
-                    showLoading(false)
-                    Toast.makeText(
-                        this@LoginActivity,
-                        "خطأ في الاتصال: ${e.message}",
-                        Toast.LENGTH_LONG
-                    ).show()
+
+                // Detect successful login - redirected to POS
+                if (currentUrl.contains("pos_sales.php") ||
+                    currentUrl.contains("dashboard") ||
+                    currentUrl.contains("index.php") && !currentUrl.contains("login")) {
+
+                    // Save session and go to MainActivity
+                    sessionManager.saveSession(
+                        token = "web_session",
+                        userName = username,
+                        userId = "",
+                        userRole = "employee",
+                        tenant = tenant,
+                        tenantId = tenant,
+                        isAdmin = false
+                    )
+
+                    startActivity(Intent(this@LoginActivity, MainActivity::class.java))
+                    finish()
+                }
+            }
+
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                if (request?.isForMainFrame == true) {
+                    binding.progressBar.visibility = View.GONE
+                    Toast.makeText(this@LoginActivity, "لا يمكن الاتصال بالخادم", Toast.LENGTH_LONG).show()
+                    // Go back to form
+                    binding.loginForm.visibility = View.VISIBLE
+                    binding.webViewLogin.visibility = View.GONE
                 }
             }
         }
+
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
+        webView.loadUrl(LOGIN_URL)
     }
 
-    private fun handleLoginResponse(
-        responseBody: String,
-        username: String,
-        password: String,
-        tenant: String
-    ) {
-        try {
-            val json = JSONObject(responseBody)
-            val success = json.optBoolean("success", false)
-
-            if (success) {
-                val data = json.optJSONObject("data") ?: json
-                val token = data.optString("token", "session_active")
-                val userName = data.optString("user_name", username)
-                val userId = data.optString("user_id", "")
-                val userRole = data.optString("role", "employee")
-                val tenantName = data.optString("tenant", tenant)
-                val tenantId = data.optString("tenant_id", tenant)
-                val isAdmin = data.optBoolean("is_admin", false)
-                val branchId = data.optString("branch_id", "")
-                val branchName = data.optString("branch_name", "")
-
-                sessionManager.saveSession(
-                    token = token,
-                    userName = userName,
-                    userId = userId,
-                    userRole = userRole,
-                    tenant = tenantName,
-                    tenantId = tenantId,
-                    isAdmin = isAdmin,
-                    branchId = branchId,
-                    branchName = branchName
-                )
-
-                // Always save credentials for auto-login (Remember Me)
-                sessionManager.saveCredentials(username, password)
-
-                startActivity(Intent(this, MainActivity::class.java))
-                finish()
-            } else {
-                val message = json.optString("message", "اسم المستخدم أو كلمة المرور غير صحيحة")
-                Toast.makeText(this, message, Toast.LENGTH_LONG).show()
-            }
-        } catch (e: Exception) {
-            Toast.makeText(this, "خطأ في البيانات المستلمة", Toast.LENGTH_LONG).show()
+    override fun onBackPressed() {
+        if (binding.webViewLogin.visibility == View.VISIBLE) {
+            binding.webViewLogin.visibility = View.GONE
+            binding.loginForm.visibility = View.VISIBLE
+            binding.progressBar.visibility = View.GONE
+        } else {
+            super.onBackPressed()
         }
-    }
-
-    private fun showLoading(show: Boolean) {
-        binding.progressBar.visibility = if (show) View.VISIBLE else View.GONE
-        binding.btnLogin.isEnabled = !show
-        binding.etUsername.isEnabled = !show
-        binding.etPassword.isEnabled = !show
     }
 }

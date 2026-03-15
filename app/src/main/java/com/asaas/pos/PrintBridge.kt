@@ -5,23 +5,40 @@ import android.content.Context
 import android.util.Log
 import android.webkit.JavascriptInterface
 import kotlinx.coroutines.*
-import java.io.OutputStream
+import org.json.JSONObject
 import java.util.UUID
 
+/**
+ * JavaScript bridge for Bluetooth printing
+ * Called from WebView JS as: AndroidPrint.printReceipt(jsonData)
+ */
 class PrintBridge(private val context: Context) {
 
     companion object {
         private const val TAG = "AsaasPOS_Print"
         private val SPP_UUID = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+        fun successResult(): String = JSONObject().apply {
+            put("success", true)
+        }.toString()
+
+        fun errorResult(msg: String?): String = JSONObject().apply {
+            put("success", false)
+            put("error", msg ?: "Unknown error")
+        }.toString()
     }
 
     @JavascriptInterface
     fun printReceipt(jsonData: String): String {
         return try {
-            val result = runBlocking { withContext(Dispatchers.IO) { printViaBluetooth(jsonData) } }
+            val result = runBlocking {
+                withContext(Dispatchers.IO) {
+                    printViaBluetooth(jsonData)
+                }
+            }
             result
         } catch (e: Exception) {
-            "{"success":false,"error":"${e.message}"}"
+            errorResult(e.message)
         }
     }
 
@@ -29,7 +46,9 @@ class PrintBridge(private val context: Context) {
     fun isBluetoothPrinterAvailable(): Boolean {
         return try {
             BluetoothAdapter.getDefaultAdapter()?.isEnabled == true
-        } catch (e: Exception) { false }
+        } catch (e: Exception) {
+            false
+        }
     }
 
     @JavascriptInterface
@@ -38,37 +57,49 @@ class PrintBridge(private val context: Context) {
             val adapter = BluetoothAdapter.getDefaultAdapter() ?: return "[]"
             if (!adapter.isEnabled) return "[]"
             val sb = StringBuilder("[")
-            adapter.bondedDevices.forEachIndexed { i, d ->
+            adapter.bondedDevices.forEachIndexed { i, device ->
                 if (i > 0) sb.append(",")
-                sb.append("{"name":"${d.name}","address":"${d.address}"}")
+                val obj = JSONObject()
+                obj.put("name", device.name)
+                obj.put("address", device.address)
+                sb.append(obj.toString())
             }
             sb.append("]")
             sb.toString()
-        } catch (e: Exception) { "[]" }
+        } catch (e: Exception) {
+            "[]"
+        }
     }
 
     @JavascriptInterface
     fun printToDevice(deviceAddress: String, base64Data: String): String {
         return try {
             val bytes = android.util.Base64.decode(base64Data, android.util.Base64.DEFAULT)
-            runBlocking { withContext(Dispatchers.IO) { sendBytes(deviceAddress, bytes) } }
+            runBlocking {
+                withContext(Dispatchers.IO) {
+                    sendBytes(deviceAddress, bytes)
+                }
+            }
         } catch (e: Exception) {
-            "{"success":false,"error":"${e.message}"}"
+            errorResult(e.message)
         }
     }
 
     private fun printViaBluetooth(jsonData: String): String {
-        val adapter = BluetoothAdapter.getDefaultAdapter() ?: return "{"success":false,"error":"No Bluetooth"}"
-        if (!adapter.isEnabled) return "{"success":false,"error":"Bluetooth off"}"
-        
-        val printer = adapter.bondedDevices.find { d ->
-            d.name?.lowercase()?.let { n ->
-                n.contains("printer") || n.contains("pos") || n.contains("thermal") || n.contains("epson")
+        val adapter = BluetoothAdapter.getDefaultAdapter()
+            ?: return errorResult("No Bluetooth adapter")
+        if (!adapter.isEnabled) return errorResult("Bluetooth is disabled")
+
+        val printer = adapter.bondedDevices.find { device ->
+            device.name?.lowercase()?.let { name ->
+                name.contains("printer") || name.contains("pos") ||
+                name.contains("thermal") || name.contains("epson")
             } ?: false
-        } ?: adapter.bondedDevices.firstOrNull() ?: return "{"success":false,"error":"No printer paired"}"
-        
+        } ?: adapter.bondedDevices.firstOrNull()
+            ?: return errorResult("No printer paired")
+
         return try {
-            val json = org.json.JSONObject(jsonData)
+            val json = JSONObject(jsonData)
             val escPosB64 = json.optString("escpos", "")
             val bytes = if (escPosB64.isNotEmpty()) {
                 android.util.Base64.decode(escPosB64, android.util.Base64.DEFAULT)
@@ -77,7 +108,7 @@ class PrintBridge(private val context: Context) {
             }
             sendBytes(printer.address, bytes)
         } catch (e: Exception) {
-            "{"success":false,"error":"${e.message}"}"
+            errorResult(e.message)
         }
     }
 
@@ -88,13 +119,16 @@ class PrintBridge(private val context: Context) {
             adapter.cancelDiscovery()
             val socket = device.createRfcommSocketToServiceRecord(SPP_UUID)
             socket.connect()
-            socket.outputStream.apply { write(bytes); flush() }
+            socket.outputStream.apply {
+                write(bytes)
+                flush()
+            }
             Thread.sleep(500)
             socket.close()
-            "{"success":true}"
+            successResult()
         } catch (e: Exception) {
-            Log.e(TAG, "BT error: ${e.message}")
-            "{"success":false,"error":"${e.message}"}"
+            Log.e(TAG, "BT send error: " + e.message)
+            errorResult(e.message)
         }
     }
 }

@@ -2,35 +2,20 @@ package com.asaas.pos.utils
 
 import android.content.Context
 import android.content.SharedPreferences
-import androidx.security.crypto.EncryptedSharedPreferences
-import androidx.security.crypto.MasterKey
 
 /**
- * Manages tenant session data with encrypted SharedPreferences
- * Handles login persistence and saved credentials for ASAAS POS
+ * SessionManager - Manages tenant session data for ASAAS POS
+ * Uses SharedPreferences with fallback safety
  */
 class SessionManager(private val context: Context) {
 
     private val prefs: SharedPreferences by lazy {
-        try {
-            val masterKey = MasterKey.Builder(context)
-                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-                .build()
-            EncryptedSharedPreferences.create(
-                context,
-                PREFS_NAME,
-                masterKey,
-                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-            )
-        } catch (e: Exception) {
-            // Fallback to regular SharedPreferences if encryption fails
-            context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-        }
+        // Use regular SharedPreferences for reliability
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
     }
 
     companion object {
-        private const val PREFS_NAME = "asaas_pos_session"
+        private const val PREFS_NAME = "asaas_pos_prefs"
         private const val KEY_IS_LOGGED_IN = "is_logged_in"
         private const val KEY_AUTH_TOKEN = "auth_token"
         private const val KEY_USER_NAME = "user_name"
@@ -73,23 +58,14 @@ class SessionManager(private val context: Context) {
     }
 
     fun isLoggedIn(): Boolean = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
-
     fun getAuthToken(): String? = prefs.getString(KEY_AUTH_TOKEN, null)
-
     fun getUserName(): String? = prefs.getString(KEY_USER_NAME, null)
-
     fun getUserId(): String? = prefs.getString(KEY_USER_ID, null)
-
     fun getUserRole(): String? = prefs.getString(KEY_USER_ROLE, "employee")
-
     fun getTenant(): String? = prefs.getString(KEY_TENANT, null)
-
     fun getTenantId(): String? = prefs.getString(KEY_TENANT_ID, null)
-
     fun isAdmin(): Boolean = prefs.getBoolean(KEY_IS_ADMIN, false)
-
     fun getBranchId(): String? = prefs.getString(KEY_BRANCH_ID, null)
-
     fun getBranchName(): String? = prefs.getString(KEY_BRANCH_NAME, null)
 
     fun saveCredentials(username: String, password: String) {
@@ -99,6 +75,10 @@ class SessionManager(private val context: Context) {
             putBoolean(KEY_REMEMBER_ME, true)
             apply()
         }
+    }
+
+    fun saveTenantId(tenantId: String) {
+        prefs.edit().putString(KEY_TENANT_ID, tenantId).apply()
     }
 
     fun clearSavedCredentials() {
@@ -111,9 +91,7 @@ class SessionManager(private val context: Context) {
     }
 
     fun getSavedUsername(): String? = prefs.getString(KEY_SAVED_USERNAME, null)
-
     fun getSavedPassword(): String? = prefs.getString(KEY_SAVED_PASSWORD, null)
-
     fun isRememberMe(): Boolean = prefs.getBoolean(KEY_REMEMBER_ME, false)
 
     fun clearSession() {
@@ -124,7 +102,6 @@ class SessionManager(private val context: Context) {
             remove(KEY_USER_ID)
             remove(KEY_USER_ROLE)
             remove(KEY_TENANT)
-            remove(KEY_TENANT_ID)
             remove(KEY_IS_ADMIN)
             remove(KEY_BRANCH_ID)
             remove(KEY_BRANCH_NAME)

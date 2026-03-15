@@ -5,7 +5,6 @@ import android.os.Bundle
 import android.util.Log
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -23,7 +22,6 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
     private lateinit var btnLogin: Button
-    private var cbRemember: CheckBox? = null
     private lateinit var tvError: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var sessionManager: SessionManager
@@ -45,12 +43,11 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        // Find views (cbRemember is optional - may not exist in layout)
+        // Find views
         etTenant = findViewById(R.id.etTenant)
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
         btnLogin = findViewById(R.id.btnLogin)
-        cbRemember = findViewById(R.id.cbRemember)
         tvError = findViewById(R.id.tvError)
         progressBar = findViewById(R.id.progressBar)
 
@@ -60,7 +57,6 @@ class LoginActivity : AppCompatActivity() {
             val savedUsername = sessionManager.getSavedUsername() ?: ""
             etTenant.setText(savedTenant)
             etUsername.setText(savedUsername)
-            cbRemember?.isChecked = true
         }
 
         btnLogin.setOnClickListener {
@@ -164,14 +160,9 @@ class LoginActivity : AppCompatActivity() {
                     tenantName = tenantName
                 )
 
-                // Save credentials if remember me is checked
-                val rememberChecked = cbRemember?.isChecked ?: true
-                if (rememberChecked) {
-                    sessionManager.saveCredentials(username, password)
-                    sessionManager.saveTenantId(tenantId)
-                } else {
-                    sessionManager.clearSavedCredentials()
-                }
+                // Always save credentials for auto-login
+                sessionManager.saveCredentials(username, password)
+                sessionManager.saveTenantId(tenantId)
 
                 Toast.makeText(this, "مرحباً $userName", Toast.LENGTH_SHORT).show()
                 goToMain()

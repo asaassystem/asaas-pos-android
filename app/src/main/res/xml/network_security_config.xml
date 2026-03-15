@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Allow cleartext traffic for ASAAS system server -->
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="true">super.asaas-system.com</domain>
+        <domain includeSubdomains="true">asaas-system.com</domain>
+        <!-- Trust user-added CAs for internal servers -->
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </domain-config>
+    
+    <!-- Default: Allow HTTPS everywhere -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>

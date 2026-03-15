@@ -23,6 +23,7 @@ class SessionManager(private val context: Context) {
         private const val KEY_USER_ROLE = "user_role"
         private const val KEY_TENANT = "tenant"
         private const val KEY_TENANT_ID = "tenant_id"
+        private const val KEY_TENANT_NAME = "tenant_name"
         private const val KEY_IS_ADMIN = "is_admin"
         private const val KEY_SAVED_USERNAME = "saved_username"
         private const val KEY_SAVED_PASSWORD = "saved_password"
@@ -40,7 +41,8 @@ class SessionManager(private val context: Context) {
         tenantId: String,
         isAdmin: Boolean,
         branchId: String = "",
-        branchName: String = ""
+        branchName: String = "",
+        tenantName: String = ""
     ) {
         prefs.edit().apply {
             putBoolean(KEY_IS_LOGGED_IN, true)
@@ -50,6 +52,7 @@ class SessionManager(private val context: Context) {
             putString(KEY_USER_ROLE, userRole)
             putString(KEY_TENANT, tenant)
             putString(KEY_TENANT_ID, tenantId)
+            putString(KEY_TENANT_NAME, tenantName.ifEmpty { tenant })
             putBoolean(KEY_IS_ADMIN, isAdmin)
             putString(KEY_BRANCH_ID, branchId)
             putString(KEY_BRANCH_NAME, branchName)
@@ -59,11 +62,14 @@ class SessionManager(private val context: Context) {
 
     fun isLoggedIn(): Boolean = prefs.getBoolean(KEY_IS_LOGGED_IN, false)
     fun getAuthToken(): String? = prefs.getString(KEY_AUTH_TOKEN, null)
+    fun getToken(): String? = getAuthToken()  // alias
     fun getUserName(): String? = prefs.getString(KEY_USER_NAME, null)
+    fun getUsername(): String? = getUserName()  // alias
     fun getUserId(): String? = prefs.getString(KEY_USER_ID, null)
     fun getUserRole(): String? = prefs.getString(KEY_USER_ROLE, "employee")
     fun getTenant(): String? = prefs.getString(KEY_TENANT, null)
     fun getTenantId(): String? = prefs.getString(KEY_TENANT_ID, null)
+    fun getTenantName(): String? = prefs.getString(KEY_TENANT_NAME, null)
     fun isAdmin(): Boolean = prefs.getBoolean(KEY_IS_ADMIN, false)
     fun getBranchId(): String? = prefs.getString(KEY_BRANCH_ID, null)
     fun getBranchName(): String? = prefs.getString(KEY_BRANCH_NAME, null)
@@ -94,6 +100,8 @@ class SessionManager(private val context: Context) {
     fun getSavedPassword(): String? = prefs.getString(KEY_SAVED_PASSWORD, null)
     fun isRememberMe(): Boolean = prefs.getBoolean(KEY_REMEMBER_ME, false)
 
+    fun logout() = clearSession()  // alias
+
     fun clearSession() {
         prefs.edit().apply {
             putBoolean(KEY_IS_LOGGED_IN, false)
@@ -102,6 +110,7 @@ class SessionManager(private val context: Context) {
             remove(KEY_USER_ID)
             remove(KEY_USER_ROLE)
             remove(KEY_TENANT)
+            remove(KEY_TENANT_NAME)
             remove(KEY_IS_ADMIN)
             remove(KEY_BRANCH_ID)
             remove(KEY_BRANCH_NAME)

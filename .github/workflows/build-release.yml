@@ -4,8 +4,6 @@ on:
   push:
     branches:
       - main
-    tags:
-      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -35,7 +33,19 @@ jobs:
       - name: Generate Gradle Wrapper
         run: gradle wrapper --gradle-version 8.5
 
-      - name: Build Release APK
+      - name: Generate Debug Keystore for signing
+        run: |
+          keytool -genkey -v \
+            -keystore app/debug.keystore \
+            -alias androiddebugkey \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android \
+            -keypass android \
+            -dname "CN=ASAAS POS, OU=Android, O=AsaasSystem, L=SA, S=SA, C=SA"
+
+      - name: Build Signed Release APK
         run: ./gradlew assembleRelease
 
       - name: Get Version Name
@@ -45,11 +55,16 @@ jobs:
           VERSION=${VERSION:-1.0.0}
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
+      - name: Rename APK
+        run: |
+          APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -1)
+          cp "$APK_PATH" "app/build/outputs/apk/release/asaas-pos-v${{ steps.version.outputs.version }}.apk"
+
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: asaas-pos-release
-          path: app/build/outputs/apk/release/
+          path: app/build/outputs/apk/release/asaas-pos-v*.apk
 
       - name: Delete old latest release
         run: |
@@ -63,7 +78,12 @@ jobs:
         with:
           tag_name: latest
           name: ASAAS POS v${{ steps.version.outputs.version }}
-          files: app/build/outputs/apk/release/*.apk
+          body: |
+            ## تطبيق نقاط البيع ASAAS POS
+            - تسجيل دخول المستأجرين
+            - حفظ بيانات الدخول تلقائياً
+            - متوافق مع Android 7.0+
+          files: app/build/outputs/apk/release/asaas-pos-v*.apk
           draft: false
           prerelease: false
           make_latest: true

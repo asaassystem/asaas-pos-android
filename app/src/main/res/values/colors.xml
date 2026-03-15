@@ -4,9 +4,13 @@
     <color name="colorPrimary">#1E3A5F</color>
     <color name="colorPrimaryDark">#142840</color>
     <color name="colorAccent">#F5A623</color>
-    <!-- Aliases used in code -->
+    <!-- Aliases used in Java/Kotlin code -->
     <color name="asaas_primary">#1E3A5F</color>
     <color name="asaas_secondary">#F5A623</color>
+    <!-- Aliases used in layouts -->
+    <color name="asaas_bg_dark">#0D1B2A</color>
+    <color name="asaas_card_bg">#1A2B3C</color>
+    <color name="asaas_text_primary">#FFFFFF</color>
     <!-- General Colors -->
     <color name="colorWhite">#FFFFFF</color>
     <color name="colorBlack">#000000</color>

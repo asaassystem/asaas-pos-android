@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- ASAAS POS Colors -->
+    <color name="colorPrimary">#1E3A5F</color>
+    <color name="colorPrimaryDark">#142840</color>
+    <color name="colorAccent">#F5A623</color>
+    <color name="colorWhite">#FFFFFF</color>
+    <color name="colorBlack">#000000</color>
+    <color name="colorGray">#9E9E9E</color>
+    <color name="colorLightGray">#F5F5F5</color>
+    <color name="colorSuccess">#4CAF50</color>
+    <color name="colorError">#F44336</color>
+    <color name="colorWarning">#FF9800</color>
+    <color name="colorBackground">#F8F9FA</color>
+    <color name="colorCardBackground">#FFFFFF</color>
+    <color name="colorTextPrimary">#212121</color>
+    <color name="colorTextSecondary">#757575</color>
+    <color name="colorDivider">#BDBDBD</color>
+    <color name="colorSplashBackground">#1E3A5F</color>
+</resources>

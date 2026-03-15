@@ -23,7 +23,7 @@ class LoginActivity : AppCompatActivity() {
     private lateinit var etUsername: EditText
     private lateinit var etPassword: EditText
     private lateinit var btnLogin: Button
-    private lateinit var cbRemember: CheckBox
+    private var cbRemember: CheckBox? = null
     private lateinit var tvError: TextView
     private lateinit var progressBar: ProgressBar
     private lateinit var sessionManager: SessionManager
@@ -45,7 +45,7 @@ class LoginActivity : AppCompatActivity() {
             return
         }
 
-        // Find views
+        // Find views (cbRemember is optional - may not exist in layout)
         etTenant = findViewById(R.id.etTenant)
         etUsername = findViewById(R.id.etUsername)
         etPassword = findViewById(R.id.etPassword)
@@ -60,7 +60,7 @@ class LoginActivity : AppCompatActivity() {
             val savedUsername = sessionManager.getSavedUsername() ?: ""
             etTenant.setText(savedTenant)
             etUsername.setText(savedUsername)
-            cbRemember.isChecked = true
+            cbRemember?.isChecked = true
         }
 
         btnLogin.setOnClickListener {
@@ -164,8 +164,9 @@ class LoginActivity : AppCompatActivity() {
                     tenantName = tenantName
                 )
 
-                // Save credentials if remember me
-                if (cbRemember.isChecked) {
+                // Save credentials if remember me is checked
+                val rememberChecked = cbRemember?.isChecked ?: true
+                if (rememberChecked) {
                     sessionManager.saveCredentials(username, password)
                     sessionManager.saveTenantId(tenantId)
                 } else {

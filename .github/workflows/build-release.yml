@@ -32,14 +32,11 @@ jobs:
       - name: Create root build.gradle
         run: |
           if [ ! -f build.gradle ]; then
-            echo "buildscript {" > build.gradle
-            echo "    repositories { google(); mavenCentral() }" >> build.gradle
-            echo "    dependencies {" >> build.gradle
-            echo "        classpath 'com.android.tools.build:gradle:8.2.0'" >> build.gradle
-            echo "        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.22'" >> build.gradle
-            echo "    }" >> build.gradle
+            echo "// Top-level build file" > build.gradle
+            echo "plugins {" >> build.gradle
+            echo "    id 'com.android.application' version '8.2.0' apply false" >> build.gradle
+            echo "    id 'org.jetbrains.kotlin.android' version '1.9.22' apply false" >> build.gradle
             echo "}" >> build.gradle
-            echo "allprojects { repositories { google(); mavenCentral() } }" >> build.gradle
           fi
 
       - name: Build Release APK

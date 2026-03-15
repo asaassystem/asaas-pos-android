@@ -1,162 +1,211 @@
 package com.asaas.pos
 
-import android.annotation.SuppressLint
 import android.content.Intent
-import android.net.http.SslError
 import android.os.Bundle
+import android.util.Log
 import android.view.View
-import android.webkit.*
+import android.widget.Button
+import android.widget.CheckBox
+import android.widget.EditText
+import android.widget.ProgressBar
+import android.widget.TextView
+import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import com.asaas.pos.databinding.ActivityLoginBinding
 import com.asaas.pos.utils.SessionManager
+import org.json.JSONObject
+import java.net.HttpURLConnection
+import java.net.URL
+import java.util.concurrent.Executors
 
-/**
- * LoginActivity - WebView كامل يفتح super_admin.php
- * المستخدم يدخل بيانات المنشأة من لوحة التحكم مباشرة
- * عند الانتقال لـ pos_sales.php يتم الانتقال لـ MainActivity
- */
 class LoginActivity : AppCompatActivity() {
 
-    private lateinit var binding: ActivityLoginBinding
+    private lateinit var etTenant: EditText
+    private lateinit var etUsername: EditText
+    private lateinit var etPassword: EditText
+    private lateinit var btnLogin: Button
+    private lateinit var cbRemember: CheckBox
+    private lateinit var tvError: TextView
+    private lateinit var progressBar: ProgressBar
     private lateinit var sessionManager: SessionManager
 
     companion object {
-        const val BASE_URL = "https://super.asaas-system.com"
-        const val LOGIN_URL = "$BASE_URL/login.php"
-        const val POS_URL = "$BASE_URL/pos_sales.php"
+        private const val TAG = "LoginActivity"
+        private const val API_URL = "https://super.asaas-system.com/_pos_api.php"
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        binding = ActivityLoginBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+        setContentView(R.layout.activity_login)
 
         sessionManager = SessionManager(this)
 
-        setupWebView()
-        loadLoginPage()
-    }
-
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun setupWebView() {
-        binding.webViewLogin.apply {
-            settings.apply {
-                javaScriptEnabled = true
-                domStorageEnabled = true
-                databaseEnabled = true
-                setSupportZoom(true)
-                builtInZoomControls = false
-                useWideViewPort = true
-                loadWithOverviewMode = true
-                mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
-                cacheMode = WebSettings.LOAD_DEFAULT
-                userAgentString = "$userAgentString ASAAS-POS/1.0"
-            }
-
-            webViewClient = object : WebViewClient() {
-
-                override fun onReceivedSslError(
-                    view: WebView?, handler: SslErrorHandler?, error: SslError?
-                ) {
-                    handler?.proceed() // قبول SSL الداخلي
-                }
-
-                override fun onPageStarted(
-                    view: WebView?, url: String?, favicon: android.graphics.Bitmap?
-                ) {
-                    super.onPageStarted(view, url, favicon)
-                    binding.progressBar.visibility = View.VISIBLE
-                }
-
-                override fun onPageFinished(view: WebView?, url: String?) {
-                    super.onPageFinished(view, url)
-                    binding.progressBar.visibility = View.GONE
-                    CookieManager.getInstance().flush()
-
-                    val currentUrl = url ?: return
-
-                    // ✅ إذا وصل لـ POS انتقل مباشرة للـ MainActivity
-                    if (currentUrl.contains("pos_sales.php")) {
-                        // استخرج tenant_id من URL إن وُجد
-                        val tenantId = extractParam(currentUrl, "tenant_id")
-                            ?: extractParam(currentUrl, "tenant")
-                            ?: ""
-
-                        sessionManager.saveSession(
-                            token = "web_session_active",
-                            userName = "pos_user",
-                            userId = "",
-                            userRole = "employee",
-                            tenant = tenantId,
-                            tenantId = tenantId,
-                            isAdmin = false
-                        )
-
-                        startActivity(Intent(this@LoginActivity, MainActivity::class.java))
-                        finish()
-                    }
-                }
-
-                override fun shouldOverrideUrlLoading(
-                    view: WebView?, request: WebResourceRequest?
-                ): Boolean {
-                    val url = request?.url?.toString() ?: return false
-                    // السماح بكل روابط النظام
-                    return if (url.contains(BASE_URL)) {
-                        false // تحميل داخل WebView
-                    } else {
-                        false
-                    }
-                }
-            }
-
-            webChromeClient = object : WebChromeClient() {
-                override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                    if (newProgress == 100) {
-                        binding.progressBar.visibility = View.GONE
-                    }
-                }
-            }
+        // Check if already logged in
+        if (sessionManager.isLoggedIn()) {
+            goToMain()
+            return
         }
 
-        CookieManager.getInstance().setAcceptCookie(true)
-        CookieManager.getInstance().setAcceptThirdPartyCookies(binding.webViewLogin, true)
-    }
+        // Find views
+        etTenant = findViewById(R.id.etTenant)
+        etUsername = findViewById(R.id.etUsername)
+        etPassword = findViewById(R.id.etPassword)
+        btnLogin = findViewById(R.id.btnLogin)
+        cbRemember = findViewById(R.id.cbRemember)
+        tvError = findViewById(R.id.tvError)
+        progressBar = findViewById(R.id.progressBar)
 
-    private fun loadLoginPage() {
-        binding.webViewLogin.loadUrl(LOGIN_URL)
-    }
+        // Load saved credentials
+        if (sessionManager.isRememberMe()) {
+            val savedTenant = sessionManager.getTenantId() ?: ""
+            val savedUsername = sessionManager.getSavedUsername() ?: ""
+            etTenant.setText(savedTenant)
+            etUsername.setText(savedUsername)
+            cbRemember.isChecked = true
+        }
 
-    private fun extractParam(url: String, param: String): String? {
-        return try {
-            val uri = android.net.Uri.parse(url)
-            uri.getQueryParameter(param)
-        } catch (e: Exception) {
-            null
+        btnLogin.setOnClickListener {
+            performLogin()
         }
     }
 
-    override fun onBackPressed() {
-        if (binding.webViewLogin.canGoBack()) {
-            binding.webViewLogin.goBack()
+    private fun performLogin() {
+        val tenantId = etTenant.text.toString().trim()
+        val username = etUsername.text.toString().trim()
+        val password = etPassword.text.toString().trim()
+
+        // Validate inputs
+        if (tenantId.isEmpty()) {
+            etTenant.error = "أدخل رقم المنشأة"
+            return
+        }
+        if (username.isEmpty()) {
+            etUsername.error = "أدخل اسم المستخدم"
+            return
+        }
+        if (password.isEmpty()) {
+            etPassword.error = "أدخل كلمة المرور"
+            return
+        }
+
+        // Show loading
+        showLoading(true)
+        tvError.visibility = View.GONE
+
+        // Execute login in background thread
+        val executor = Executors.newSingleThreadExecutor()
+        executor.execute {
+            try {
+                val result = callLoginApi(tenantId, username, password)
+                runOnUiThread {
+                    showLoading(false)
+                    handleLoginResult(result, tenantId, username, password)
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "Login error: ${e.message}")
+                runOnUiThread {
+                    showLoading(false)
+                    showError("تعذر الاتصال بالخادم. تحقق من الإنترنت.")
+                }
+            }
+        }
+    }
+
+    private fun callLoginApi(tenantId: String, username: String, password: String): String {
+        val url = URL(API_URL)
+        val conn = url.openConnection() as HttpURLConnection
+        conn.requestMethod = "POST"
+        conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
+        conn.setRequestProperty("Accept", "application/json")
+        conn.doOutput = true
+        conn.connectTimeout = 15000
+        conn.readTimeout = 15000
+
+        val params = "action=login&tenant_id=${tenantId}&username=${username}&password=${password}&source=android_app"
+        conn.outputStream.use { it.write(params.toByteArray()) }
+
+        val responseCode = conn.responseCode
+        val response = if (responseCode == 200) {
+            conn.inputStream.bufferedReader().readText()
         } else {
-            super.onBackPressed()
+            conn.errorStream?.bufferedReader()?.readText() ?: "{\"ok\":false,\"error\":\"server_error\"}"
+        }
+        conn.disconnect()
+        return response
+    }
+
+    private fun handleLoginResult(response: String, tenantId: String, username: String, password: String) {
+        try {
+            Log.d(TAG, "Login response: $response")
+            val json = JSONObject(response)
+            val ok = json.optBoolean("ok", false)
+
+            if (ok) {
+                val data = json.optJSONObject("data") ?: JSONObject()
+                val token = data.optString("token", "")
+                val userName = data.optString("name", username)
+                val userId = data.optString("id", "")
+                val userRole = data.optString("role", "employee")
+                val tenantName = data.optString("tenant_name", tenantId)
+                val isAdmin = data.optBoolean("is_admin", false)
+                val branchId = data.optString("branch_id", "")
+                val branchName = data.optString("branch_name", "")
+
+                // Save session
+                sessionManager.saveSession(
+                    token = token,
+                    userName = userName,
+                    userId = userId,
+                    userRole = userRole,
+                    tenant = tenantName,
+                    tenantId = tenantId,
+                    isAdmin = isAdmin,
+                    branchId = branchId,
+                    branchName = branchName,
+                    tenantName = tenantName
+                )
+
+                // Save credentials if remember me
+                if (cbRemember.isChecked) {
+                    sessionManager.saveCredentials(username, password)
+                    sessionManager.saveTenantId(tenantId)
+                } else {
+                    sessionManager.clearSavedCredentials()
+                }
+
+                Toast.makeText(this, "مرحباً $userName", Toast.LENGTH_SHORT).show()
+                goToMain()
+
+            } else {
+                val errorMsg = json.optString("error", "")
+                val message = when (errorMsg) {
+                    "unauthorized" -> "اسم المستخدم أو كلمة المرور غير صحيحة"
+                    "tenant_not_found" -> "رقم المنشأة غير موجود"
+                    "inactive" -> "الحساب غير مفعل"
+                    else -> "فشل تسجيل الدخول: $errorMsg"
+                }
+                showError(message)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Parse error: ${e.message}")
+            showError("حدث خطأ في معالجة البيانات")
         }
     }
 
-    override fun onResume() {
-        super.onResume()
-        binding.webViewLogin.onResume()
+    private fun showLoading(loading: Boolean) {
+        progressBar.visibility = if (loading) View.VISIBLE else View.GONE
+        btnLogin.isEnabled = !loading
+        btnLogin.text = if (loading) "جارٍ تسجيل الدخول..." else "تسجيل الدخول"
     }
 
-    override fun onPause() {
-        super.onPause()
-        binding.webViewLogin.onPause()
+    private fun showError(message: String) {
+        tvError.text = message
+        tvError.visibility = View.VISIBLE
     }
 
-    override fun onDestroy() {
-        binding.webViewLogin.destroy()
-        super.onDestroy()
+    private fun goToMain() {
+        startActivity(Intent(this, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+        })
+        finish()
     }
 }

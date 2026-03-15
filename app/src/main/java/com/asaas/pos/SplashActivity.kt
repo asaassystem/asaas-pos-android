@@ -12,7 +12,7 @@ import com.asaas.pos.utils.SessionManager
 class SplashActivity : AppCompatActivity() {
 
     companion object {
-        private const val SPLASH_DELAY = 2000L
+        private const val SPLASH_DELAY = 1500L
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -22,11 +22,12 @@ class SplashActivity : AppCompatActivity() {
         val sessionManager = SessionManager(this)
 
         Handler(Looper.getMainLooper()).postDelayed({
-            if (sessionManager.isLoggedIn()) {
-                startActivity(Intent(this, MainActivity::class.java))
+            val intent = if (sessionManager.isLoggedIn()) {
+                Intent(this, MainActivity::class.java)
             } else {
-                startActivity(Intent(this, LoginActivity::class.java))
+                Intent(this, LoginActivity::class.java)
             }
+            startActivity(intent)
             finish()
         }, SPLASH_DELAY)
     }

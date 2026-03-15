@@ -18,6 +18,10 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
+/**
+ * Login Activity for ASAAS POS
+ * Supports tenant login with saved credentials (Remember Me)
+ */
 class LoginActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityLoginBinding
@@ -42,15 +46,28 @@ class LoginActivity : AppCompatActivity() {
         if (sessionManager.isRememberMe()) {
             binding.etUsername.setText(sessionManager.getSavedUsername())
             binding.etPassword.setText(sessionManager.getSavedPassword())
-            binding.cbRememberMe.isChecked = true
+            val savedTenant = sessionManager.getTenantId()
+            if (!savedTenant.isNullOrEmpty()) {
+                binding.etTenant.setText(savedTenant)
+            }
         }
 
         binding.btnLogin.setOnClickListener {
             performLogin()
         }
+
+        // Settings button - navigate to settings activity
+        try {
+            binding.btnSettings.setOnClickListener {
+                startActivity(Intent(this, SettingsActivity::class.java))
+            }
+        } catch (e: Exception) {
+            // btnSettings may not exist in all layout versions
+        }
     }
 
     private fun performLogin() {
+        val tenant = try { binding.etTenant.text.toString().trim() } catch (e: Exception) { "" }
         val username = binding.etUsername.text.toString().trim()
         val password = binding.etPassword.text.toString().trim()
 
@@ -75,6 +92,7 @@ class LoginActivity : AppCompatActivity() {
                 val formBody = FormBody.Builder()
                     .add("username", username)
                     .add("password", password)
+                    .add("tenant_id", tenant)
                     .add("app_login", "true")
                     .add("device", "android")
                     .build()
@@ -90,7 +108,7 @@ class LoginActivity : AppCompatActivity() {
 
                 withContext(Dispatchers.Main) {
                     showLoading(false)
-                    handleLoginResponse(body, username, password)
+                    handleLoginResponse(body, username, password, tenant)
                 }
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
@@ -105,19 +123,24 @@ class LoginActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleLoginResponse(responseBody: String, username: String, password: String) {
+    private fun handleLoginResponse(
+        responseBody: String,
+        username: String,
+        password: String,
+        tenant: String
+    ) {
         try {
             val json = JSONObject(responseBody)
             val success = json.optBoolean("success", false)
 
             if (success) {
                 val data = json.optJSONObject("data") ?: json
-                val token = data.optString("token", "")
+                val token = data.optString("token", "session_active")
                 val userName = data.optString("user_name", username)
                 val userId = data.optString("user_id", "")
                 val userRole = data.optString("role", "employee")
-                val tenant = data.optString("tenant", "")
-                val tenantId = data.optString("tenant_id", "")
+                val tenantName = data.optString("tenant", tenant)
+                val tenantId = data.optString("tenant_id", tenant)
                 val isAdmin = data.optBoolean("is_admin", false)
                 val branchId = data.optString("branch_id", "")
                 val branchName = data.optString("branch_name", "")
@@ -127,19 +150,15 @@ class LoginActivity : AppCompatActivity() {
                     userName = userName,
                     userId = userId,
                     userRole = userRole,
-                    tenant = tenant,
+                    tenant = tenantName,
                     tenantId = tenantId,
                     isAdmin = isAdmin,
                     branchId = branchId,
                     branchName = branchName
                 )
 
-                // Save credentials if Remember Me is checked
-                if (binding.cbRememberMe.isChecked) {
-                    sessionManager.saveCredentials(username, password)
-                } else {
-                    sessionManager.clearSavedCredentials()
-                }
+                // Always save credentials for auto-login (Remember Me)
+                sessionManager.saveCredentials(username, password)
 
                 startActivity(Intent(this, MainActivity::class.java))
                 finish()
@@ -148,8 +167,7 @@ class LoginActivity : AppCompatActivity() {
                 Toast.makeText(this, message, Toast.LENGTH_LONG).show()
             }
         } catch (e: Exception) {
-            // If JSON parse fails, try WebView fallback login
-            Toast.makeText(this, "خطأ في البيانات: ${e.message}", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "خطأ في البيانات المستلمة", Toast.LENGTH_LONG).show()
         }
     }
 

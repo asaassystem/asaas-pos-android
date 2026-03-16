@@ -4,10 +4,12 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
@@ -16,6 +18,7 @@ import android.webkit.WebView
 import android.webkit.WebViewClient
 import android.widget.ProgressBar
 import android.widget.Toast
+import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.widget.Toolbar
@@ -39,11 +42,12 @@ class MainActivity : AppCompatActivity() {
         const val TAG = "AsaasPOS"
     }
 
-    // URLs for each tab
-    private val salesUrl get() = "$BASE_URL/pos_sales.php?tenant_id=${sessionManager.getTenantId()}"
-    private val ordersUrl get() = "$BASE_URL/pos_orders.php?tenant_id=${sessionManager.getTenantId()}"
-    private val reportsUrl get() = "$BASE_URL/pos_reports.php?tenant_id=${sessionManager.getTenantId()}"
-    private val settingsUrl get() = "$BASE_URL/pos_settings.php?tenant_id=${sessionManager.getTenantId()}"
+    private val salesUrl get() = "${BASE_URL}/pos_sales.php?tenant_id=${sessionManager.getTenantId()}&_token=${sessionManager.getToken()}"
+    private val ordersUrl get() = "${BASE_URL}/pos_orders.php?tenant_id=${sessionManager.getTenantId()}&_token=${sessionManager.getToken()}"
+    private val reportsUrl get() = "${BASE_URL}/pos_reports.php?tenant_id=${sessionManager.getTenantId()}&_token=${sessionManager.getToken()}"
+    private val settingsUrl get() = "${BASE_URL}/pos_settings.php?tenant_id=${sessionManager.getTenantId()}&_token=${sessionManager.getToken()}"
+
+    private var currentSection = "sales"
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,13 +56,11 @@ class MainActivity : AppCompatActivity() {
 
         sessionManager = SessionManager(this)
 
-        // Check if logged in
         if (!sessionManager.isLoggedIn()) {
             goToLogin()
             return
         }
 
-        // Setup Views
         toolbar = findViewById(R.id.toolbar)
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
@@ -66,184 +68,161 @@ class MainActivity : AppCompatActivity() {
         bottomNav = findViewById(R.id.bottomNav)
         fabNewSale = findViewById(R.id.fabNewSale)
 
-        // Setup Toolbar
         setSupportActionBar(toolbar)
         supportActionBar?.title = "ASAAS POS"
         supportActionBar?.subtitle = sessionManager.getTenantName() ?: sessionManager.getTenantId()
 
-        // Setup WebView
         setupWebView()
-
-        // Setup Bottom Navigation
+        setupCookies()
         setupBottomNav()
 
-        // Setup Swipe Refresh
         swipeRefresh.setColorSchemeResources(R.color.colorAccent)
-        swipeRefresh.setOnRefreshListener {
-            webView.reload()
-        }
+        swipeRefresh.setOnRefreshListener { webView.reload() }
 
-        // Setup FAB
         fabNewSale.setOnClickListener {
+            currentSection = "sales"
             bottomNav.selectedItemId = R.id.nav_sales
             loadUrl(salesUrl)
-            Toast.makeText(this, "فتح صفحة البيع", Toast.LENGTH_SHORT).show()
         }
 
-        // Load default page (Sales)
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                if (webView.canGoBack()) {
+                    webView.goBack()
+                } else {
+                    AlertDialog.Builder(this@MainActivity)
+                        .setTitle("خروج")
+                        .setMessage("هل تريد الخروج من التطبيق؟")
+                        .setPositiveButton("نعم") { _, _ ->
+                            isEnabled = false
+                            onBackPressedDispatcher.onBackPressed()
+                        }
+                        .setNegativeButton("لا", null)
+                        .show()
+                }
+            }
+        })
+
         loadUrl(salesUrl)
         bottomNav.selectedItemId = R.id.nav_sales
     }
 
+    private fun setupCookies() {
+        val cm = CookieManager.getInstance()
+        cm.setAcceptCookie(true)
+        cm.setAcceptThirdPartyCookies(webView, true)
+        val tid = sessionManager.getTenantId() ?: ""
+        val usr = sessionManager.getUsername() ?: ""
+        val tok = sessionManager.getToken() ?: ""
+        val uid = sessionManager.getUserId() ?: ""
+        cm.setCookie(BASE_URL, "pos_tenant_id=${tid}; path=/")
+        cm.setCookie(BASE_URL, "pos_username=${usr}; path=/")
+        cm.setCookie(BASE_URL, "pos_token=${tok}; path=/")
+        cm.setCookie(BASE_URL, "user_id=${uid}; path=/")
+        cm.flush()
+    }
+
     @SuppressLint("SetJavaScriptEnabled")
     private fun setupWebView() {
-        val settings: WebSettings = webView.settings
-        settings.javaScriptEnabled = true
-        settings.domStorageEnabled = true
-        settings.databaseEnabled = true
-        settings.loadWithOverviewMode = true
-        settings.useWideViewPort = true
-        settings.setSupportZoom(true)
-        settings.builtInZoomControls = true
-        settings.displayZoomControls = false
-        settings.cacheMode = WebSettings.LOAD_CACHE_ELSE_NETWORK
-        settings.userAgentString = settings.userAgentString + " AsaasPOS/1.0 Android"
+        val s = webView.settings
+        s.javaScriptEnabled = true
+        s.domStorageEnabled = true
+        s.databaseEnabled = true
+        s.loadWithOverviewMode = true
+        s.useWideViewPort = true
+        s.setSupportZoom(false)
+        s.builtInZoomControls = false
+        s.displayZoomControls = false
+        s.cacheMode = WebSettings.LOAD_DEFAULT
+        s.mediaPlaybackRequiresUserGesture = false
+        s.allowFileAccess = true
+        s.userAgentString = "AsaasPOS/1.0 Android/${Build.VERSION.RELEASE} Mobile"
 
-        // Inject session cookies via JS interface
         webView.addJavascriptInterface(AndroidBridge(), "AndroidBridge")
 
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
                 progressBar.visibility = View.VISIBLE
+                swipeRefresh.isRefreshing = true
             }
 
             override fun onPageFinished(view: WebView?, url: String?) {
                 super.onPageFinished(view, url)
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
-
-                // Inject session data into page
                 injectSessionData()
-
-                // Inject CSS to hide web navigation (header/sidebar) for native app feel
                 injectNativeStyle()
             }
 
             override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
                 val url = request?.url?.toString() ?: return false
-
-                // Handle login redirect
-                if (url.contains("login") || url.contains("logout")) {
-                    sessionManager.logout()
-                    goToLogin()
-                    return true
-                }
-
-                // Handle external links
-                if (!url.startsWith(BASE_URL) && (url.startsWith("http") || url.startsWith("https"))) {
-                    try {
-                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
-                    } catch (e: Exception) {
-                        // ignore
+                if (url.startsWith(BASE_URL)) {
+                    if (url.contains("action=logout") || url.endsWith("logout.php")) {
+                        sessionManager.logout()
+                        goToLogin()
+                        return true
                     }
+                    return false
+                }
+                if (url.startsWith("http://") || url.startsWith("https://") ||
+                    url.startsWith("tel:") || url.startsWith("mailto:")) {
+                    try { startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url))) } catch (e: Exception) {}
                     return true
                 }
-
                 return false
             }
 
             override fun onReceivedError(view: WebView?, errorCode: Int, description: String?, failingUrl: String?) {
                 progressBar.visibility = View.GONE
                 swipeRefresh.isRefreshing = false
+                if (errorCode == -2 || errorCode == -6) {
+                    view?.loadData(offlineHtml(), "text/html; charset=utf-8", "UTF-8")
+                }
             }
         }
 
         webView.webChromeClient = object : WebChromeClient() {
             override fun onProgressChanged(view: WebView?, newProgress: Int) {
-                if (newProgress < 100) {
-                    progressBar.visibility = View.VISIBLE
-                } else {
-                    progressBar.visibility = View.GONE
-                    swipeRefresh.isRefreshing = false
-                }
+                progressBar.visibility = if (newProgress < 100) View.VISIBLE else View.GONE
+                if (newProgress == 100) swipeRefresh.isRefreshing = false
             }
         }
     }
 
+    private fun offlineHtml() = """<!DOCTYPE html><html dir="rtl"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>body{font-family:Arial;text-align:center;padding:40px;background:#1a1a2e;color:#fff}
+h2{color:#e94560}p{color:#aaa}button{background:#e94560;color:#fff;border:none;padding:12px 24px;
+border-radius:8px;font-size:16px;cursor:pointer;margin-top:20px}</style></head>
+<body><div style="font-size:64px">&#x1F4E1;</div><h2>لا يوجد اتصال</h2>
+<p>تحقق من اتصالك وحاول مرة أخرى</p>
+<button onclick="location.reload()">إعادة المحاولة</button></body></html>"""
+
     private fun setupBottomNav() {
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
-                R.id.nav_sales -> {
-                    loadUrl(salesUrl)
-                    true
-                }
-                R.id.nav_orders -> {
-                    loadUrl(ordersUrl)
-                    true
-                }
-                R.id.nav_reports -> {
-                    loadUrl(reportsUrl)
-                    true
-                }
-                R.id.nav_settings -> {
-                    loadUrl(settingsUrl)
-                    true
-                }
+                R.id.nav_sales -> { if (currentSection != "sales") { currentSection = "sales"; loadUrl(salesUrl) }; true }
+                R.id.nav_orders -> { if (currentSection != "orders") { currentSection = "orders"; loadUrl(ordersUrl) }; true }
+                R.id.nav_reports -> { if (currentSection != "reports") { currentSection = "reports"; loadUrl(reportsUrl) }; true }
+                R.id.nav_settings -> { if (currentSection != "settings") { currentSection = "settings"; loadUrl(settingsUrl) }; true }
                 else -> false
             }
         }
     }
 
-    private fun loadUrl(url: String) {
-        webView.loadUrl(url)
-    }
+    private fun loadUrl(url: String) { webView.loadUrl(url) }
 
     private fun injectSessionData() {
-        val tenantId = sessionManager.getTenantId() ?: ""
-        val username = sessionManager.getUsername() ?: ""
-        val token = sessionManager.getToken() ?: ""
-
-        val js = """
-            (function() {
-                try {
-                    if (window.AsaasSession === undefined) {
-                        window.AsaasSession = {
-                            tenant_id: '$tenantId',
-                            username: '$username',
-                            token: '$token',
-                            is_android: true
-                        };
-                    }
-                    // Auto-fill login form if present
-                    var tenantInput = document.querySelector('[name="tenant_id"]');
-                    var usernameInput = document.querySelector('[name="username"]');
-                    if (tenantInput) tenantInput.value = '$tenantId';
-                    if (usernameInput) usernameInput.value = '$username';
-                } catch(e) {}
-            })();
-        """.trimIndent()
-
-        webView.evaluateJavascript(js, null)
+        val tid = sessionManager.getTenantId() ?: ""
+        val usr = sessionManager.getUsername() ?: ""
+        val tok = sessionManager.getToken() ?: ""
+        val uid = sessionManager.getUserId() ?: ""
+        webView.evaluateJavascript("""(function(){try{window.AsaasSession={tenant_id:'${tid}',username:'${usr}',token:'${tok}',user_id:'${uid}',is_android:true,platform:'android'};}catch(e){}}());""", null)
     }
 
     private fun injectNativeStyle() {
-        // Hide web page header/nav since we use native toolbar + bottom nav
-        val css = """
-            (function() {
-                try {
-                    var style = document.createElement('style');
-                    style.innerHTML = '
-                        .navbar, .sidebar, .web-header, #header, .top-nav,
-                        .nav-tabs-container, .breadcrumb-container { display: none !important; }
-                        body { padding-top: 0 !important; margin-top: 0 !important; }
-                        .content-wrapper, .main-content, #content { margin-left: 0 !important; padding-left: 8px !important; }
-                    ';
-                    document.head.appendChild(style);
-                } catch(e) {}
-            })();
-        """.trimIndent()
-        webView.evaluateJavascript(css, null)
+        webView.evaluateJavascript("""(function(){try{if(document.getElementById('ans'))return;var s=document.createElement('style');s.id='ans';s.innerHTML='nav.navbar,.navbar,.sidebar,.left-sidebar,#sidebar,.web-header,#header,.top-nav,.topbar,.nav-tabs-container,.breadcrumb-container,footer,.footer{display:none!important}body{padding-top:0!important;margin-top:0!important}.content-wrapper,.main-content,#content,.page-wrapper{margin-left:0!important;padding:0 4px!important}';document.head.appendChild(s);}catch(e){}}());""", null)
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -253,24 +232,20 @@ class MainActivity : AppCompatActivity() {
 
     override fun onOptionsItemSelected(item: MenuItem): Boolean {
         return when (item.itemId) {
-            R.id.action_refresh -> {
-                webView.reload()
-                true
-            }
-            R.id.action_logout -> {
-                confirmLogout()
-                true
-            }
+            R.id.action_refresh -> { webView.reload(); true }
+            R.id.action_logout -> { confirmLogout(); true }
             else -> super.onOptionsItemSelected(item)
         }
     }
 
-    private fun confirmLogout() {
+    fun confirmLogout() {
         AlertDialog.Builder(this)
             .setTitle("تسجيل الخروج")
             .setMessage("هل تريد تسجيل الخروج؟")
             .setPositiveButton("نعم") { _, _ ->
                 sessionManager.logout()
+                CookieManager.getInstance().removeAllCookies(null)
+                CookieManager.getInstance().flush()
                 goToLogin()
             }
             .setNegativeButton("لا", null)
@@ -284,79 +259,49 @@ class MainActivity : AppCompatActivity() {
         finish()
     }
 
-    override fun onBackPressed() {
-        if (webView.canGoBack()) {
-            webView.goBack()
-        } else {
-            AlertDialog.Builder(this)
-                .setTitle("خروج")
-                .setMessage("هل تريد الخروج من التطبيق؟")
-                .setPositiveButton("نعم") { _, _ -> super.onBackPressed() }
-                .setNegativeButton("لا", null)
-                .show()
-        }
-    }
+    override fun onResume() { super.onResume(); webView.onResume() }
+    override fun onPause() { super.onPause(); webView.onPause() }
+    override fun onDestroy() { webView.destroy(); super.onDestroy() }
 
-    override fun onResume() {
-        super.onResume()
-        webView.onResume()
-    }
-
-    override fun onPause() {
-        super.onPause()
-        webView.onPause()
-    }
-
-    override fun onDestroy() {
-        webView.destroy()
-        super.onDestroy()
-    }
-
-    // JavaScript Bridge for communication between WebView and Android
     inner class AndroidBridge {
-        @JavascriptInterface
-        fun getTenantId(): String = sessionManager.getTenantId() ?: ""
-
-        @JavascriptInterface
-        fun getUsername(): String = sessionManager.getUsername() ?: ""
-
-        @JavascriptInterface
-        fun getToken(): String = sessionManager.getToken() ?: ""
+        @JavascriptInterface fun getTenantId(): String = sessionManager.getTenantId() ?: ""
+        @JavascriptInterface fun getUsername(): String = sessionManager.getUsername() ?: ""
+        @JavascriptInterface fun getToken(): String = sessionManager.getToken() ?: ""
+        @JavascriptInterface fun getUserId(): String = sessionManager.getUserId() ?: ""
+        @JavascriptInterface fun getTenantName(): String = sessionManager.getTenantName() ?: ""
+        @JavascriptInterface fun isAndroid(): Boolean = true
+        @JavascriptInterface fun getAppVersion(): String = "1.0.0"
 
         @JavascriptInterface
         fun showToast(message: String) {
+            runOnUiThread { Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show() }
+        }
+
+        @JavascriptInterface
+        fun showAlert(title: String, message: String) {
             runOnUiThread {
-                Toast.makeText(this@MainActivity, message, Toast.LENGTH_SHORT).show()
+                AlertDialog.Builder(this@MainActivity)
+                    .setTitle(title).setMessage(message)
+                    .setPositiveButton("موافق", null).show()
             }
         }
 
         @JavascriptInterface
-        fun logout() {
-            runOnUiThread { confirmLogout() }
-        }
+        fun logout() { runOnUiThread { confirmLogout() } }
 
         @JavascriptInterface
         fun navigateTo(section: String) {
             runOnUiThread {
                 when (section) {
-                    "sales" -> {
-                        bottomNav.selectedItemId = R.id.nav_sales
-                        loadUrl(salesUrl)
-                    }
-                    "orders" -> {
-                        bottomNav.selectedItemId = R.id.nav_orders
-                        loadUrl(ordersUrl)
-                    }
-                    "reports" -> {
-                        bottomNav.selectedItemId = R.id.nav_reports
-                        loadUrl(reportsUrl)
-                    }
-                    "settings" -> {
-                        bottomNav.selectedItemId = R.id.nav_settings
-                        loadUrl(settingsUrl)
-                    }
+                    "sales" -> { currentSection = "sales"; bottomNav.selectedItemId = R.id.nav_sales; loadUrl(salesUrl) }
+                    "orders" -> { currentSection = "orders"; bottomNav.selectedItemId = R.id.nav_orders; loadUrl(ordersUrl) }
+                    "reports" -> { currentSection = "reports"; bottomNav.selectedItemId = R.id.nav_reports; loadUrl(reportsUrl) }
+                    "settings" -> { currentSection = "settings"; bottomNav.selectedItemId = R.id.nav_settings; loadUrl(settingsUrl) }
                 }
             }
         }
+
+        @JavascriptInterface
+        fun setToolbarTitle(title: String) { runOnUiThread { supportActionBar?.subtitle = title } }
     }
 }

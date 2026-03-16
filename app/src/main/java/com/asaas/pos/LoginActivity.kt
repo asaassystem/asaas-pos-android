@@ -28,7 +28,7 @@ class LoginActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "LoginActivity"
-        private const val API_URL = "https://super.asaas-system.com/_pos_api.php"
+                private const val AUTH_URL = "https://super.asaas-system.com/pos_app_auth.php"
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -66,7 +66,7 @@ class LoginActivity : AppCompatActivity() {
     private fun loadSavedCredentials() {
         val t = sessionManager.getSavedTenantId()
         val u = sessionManager.getSavedUsername()
-        if (!t.isNullOrEmpty()) etTenant.setText(t)
+                if (!t.isNullOrEmpty()) etTenant.setText(t.orEmpty())
         if (!u.isNullOrEmpty()) etUsername.setText(u)
     }
 
@@ -79,7 +79,7 @@ class LoginActivity : AppCompatActivity() {
         setLoading(true)
         Executors.newSingleThreadExecutor().execute {
             try {
-                val conn = URL(API_URL).openConnection() as HttpURLConnection
+                                val conn = URL(AUTH_URL).openConnection() as HttpURLConnection
                 conn.requestMethod = "POST"
                 conn.setRequestProperty("Content-Type", "application/x-www-form-urlencoded")
                 conn.setRequestProperty("Accept", "application/json")
